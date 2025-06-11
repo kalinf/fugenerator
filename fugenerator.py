@@ -1,6 +1,7 @@
 import music21 as music
 import copy
 import itertools
+import random
 
 music.environment.set('midiPath', '/usr/bin/timidity')
 
@@ -22,7 +23,7 @@ def tempo_change(melody, k):
     return melody_of_notes(notes)
 
 def notes_of_melody(melody):
-    return list(melody.notesAndRests)
+    return list(melody.recurse().notesAndRests)
 
 def melody_of_notes(notes):
     melody = music.stream.Stream()
@@ -33,7 +34,8 @@ def melody_of_notes(notes):
 def merge_melodies(melodies):
     melody = music.stream.Stream()
     for m in melodies:
-        melody += m
+        for n in m.recurse().notes:
+            melody.append(copy.deepcopy(n))
     return melody
 
 def inversion(melody):
@@ -69,22 +71,22 @@ def augmentation(melody, k):
 def diminution(melody, k):
     return tempo_change(melody, 1/k)
 
-# transformations - list of unary transforming funcktions
-def generate_variants(melody, transformations, iterations):
+# transformations - pair of unary and binary transforming functions
+def generate_variants(melody, transformations):
     variants = set()
     variants.add(melody)
-    old_variants = variants
-    for _ in range(iterations):
-        new_variants = []
-        # for transformation in transformations:
-        #     # new_variants += [transformation(m) for m in old_variants]
-        #     for m in old_variants:
-        #         print('base')
-        #         m.show('text')
-        #         print('transformed')
-        #         transformation(m).show('text')
+    
+    unary_transformations, binary_transformations = transformations
+    for i, transformation in enumerate(unary_transformations):
+        new_variants = [transformation(m) for m in variants]
         variants |= set(new_variants)
-        old_variants = new_variants
+    for i, transformation in enumerate(binary_transformations):
+        new_variants = []
+        print(i)
+        for j in transformation[1]:
+            print(j)
+            new_variants += [instantiate_binary_transformation(transformation[0], j)(copy.deepcopy(m)) for m in variants]
+        variants |= set(new_variants)
     return variants         
         
 def instantiate_binary_transformation(transformation, k):
@@ -93,14 +95,17 @@ def instantiate_binary_transformation(transformation, k):
 def get_transformations(unary_transformations, binary_transformations):
     transformations = copy.deepcopy(unary_transformations)
     for transformation in binary_transformations:
-        for j in range(transformation[1], transformation[2]):
+        for j in transformation[1]:
             transformations.append(instantiate_binary_transformation(transformation[0], j))
     return transformations
         
 UNARY_TRANSFORMATIONS = [inversion, retrogradation]
-BINARY_TRANSFORMATIONS = [(transposition, -12, 13),
-                          (augmentation, 2, 5), 
-                          (diminution, 2, 9)]
+BINARY_TRANSFORMATIONS = [(tempo_change, [2, 4, 8, 1/2, 1/4, 1/8]),
+                          (transposition, list(range(-12, 12)))]
+TRANSFORMATIONS = (UNARY_TRANSFORMATIONS, BINARY_TRANSFORMATIONS)
+
+SAMPLES = 500
+LENGTH = 40
 
 # r == length // len(melody)
 def gen_domain(variants, r):
@@ -110,20 +115,9 @@ def gen_domain(variants, r):
 
 def main():
     kurki = make_kurki_trzy()
-    print('inwersja')
-    inversion(kurki).show('text')
-    
-    inverted_kurki = inversion(kurki)
-    inverted_kurki.show()
-    # print('transpozycja')
-    # new_kurki = transposition(kurki, 2)
-    # new_kurki.show('text')
-    # # new_kurki.show()
-    # transformations = get_transformations(UNARY_TRANSFORMATIONS, BINARY_TRANSFORMATIONS)
-    # print(transformations)
-    # variants = generate_variants(kurki, transformations, 1)
+
+    variants = list(generate_variants(kurki, TRANSFORMATIONS))
     # print(len(variants))
-    # variant = next(iter(variants))
     # print('variants:')
     # for i, variant in enumerate(variants):
     #     print(i)
@@ -131,13 +125,21 @@ def main():
     #     print()
         
     # domain = gen_domain(variants, 8)
-    # print('number of combinations:')
-    # print(len(domain))
-    # print('first domain element:')
-    # domain[0][0].show('text')
-    # melody = merge_melodies(domain[0])
-    # # melody.show('midi')
-    # print('domain merged to melody:')
-    # melody.show('text')
+    
+    domain = []
+    r = LENGTH // len(kurki)
+    for _ in range(SAMPLES):
+        domain += [random.sample(variants, r)]
+    
+    print('number of combinations:')
+    print(len(domain))
+    # for i in range(SAMPLES):
+    #     print(i)
+    #     melody = merge_melodies(domain[i])
+    #     # melody.show('midi')
+    #     print('domain merged to melody:')
+    #     melody.show('text')
+        # melody.show()
+    merge_melodies(domain[0]).show()
 
 main()
